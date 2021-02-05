@@ -1,0 +1,35 @@
+package api
+import (
+	etcdnaming "github.com/pescaria/pkg/naming/etcd"
+	"github.com/pescaria/pkg/resolver"
+
+	"github.com/spf13/viper"
+	"go.etcd.io/etcd/clientv3"
+	"google.golang.org/grpc"
+)
+
+// AppID .
+const AppID = "{{.Name}}"
+
+// NewClient new grpc client
+func NewClient(opts ...grpc.DialOption) ({{GoName .Name}}Client, error) {
+	var (
+		cfg clientv3.Config
+	)
+	if err := viper.UnmarshalKey("etcd", &cfg); err != nil {
+		return nil, err
+	}
+	disBuilder, err := etcdnaming.New(&cfg)
+	if err != nil {
+		return nil, err
+	}
+	resolver.Register(disBuilder)
+	conn, err := grpc.Dial(disBuilder.Scheme()+"://default/"+AppID, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return New{{GoName .Name}}Client(conn), nil
+}
+
+// 生成 gRPC 代码
+//go:generate protoc -I$GOPATH/src -I. --gogo_out=plugins=grpc:. api.proto

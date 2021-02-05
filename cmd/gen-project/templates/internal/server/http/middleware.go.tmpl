@@ -1,0 +1,41 @@
+package http
+
+import (
+	"os"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
+)
+
+const (
+	contextCodes = "context:codes"
+)
+
+var ginLog *logrus.Logger
+
+func init() {
+	ginLog = logrus.New()
+	ginLog.SetOutput(os.Stdout)
+}
+
+func loggerHandler(c *gin.Context) {
+	// Start timer
+	start := time.Now()
+	path := c.Request.URL.Path
+	raw := c.Request.URL.RawQuery
+	method := c.Request.Method
+	// Process request
+	c.Next()
+
+	// Stop timer
+	end := time.Now()
+	latency := end.Sub(start)
+	statusCode := c.Writer.Status()
+	ecode := c.GetInt(contextCodes)
+	clientIP := c.ClientIP()
+	if raw != "" {
+		path = path + "?" + raw
+	}
+	ginLog.Infof("method:%s | path:%s | code:%d | ip:%s | time:%v | ecode:%d", method, path, statusCode, clientIP, latency/time.Millisecond, ecode)
+}

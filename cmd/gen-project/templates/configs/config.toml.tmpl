@@ -1,0 +1,36 @@
+logLevel = 5
+
+[db]
+    addr = "127.0.0.1:3306"
+    dsn = "root:123456@tcp(127.0.0.1:3306)/{{.Name}}?timeout=1s&readTimeout=1s&writeTimeout=1s&parseTime=true&loc=Local&charset=utf8mb4,utf8"
+    active = 20
+    idle = 10
+    idleTimeout ="4h"
+
+[redis]
+    addr = "127.0.0.1:6379"
+    password = "123456"
+    idle = 10
+    active = 10
+    dialTimeout = "1s"
+    readTimeout = "1s"
+    writeTimeout = "1s"
+    idleTimeout = "10s"
+
+[grpc]
+    addr = "0.0.0.0:{{.GrpcPort}}"
+    timeout = "3s"
+
+[http]
+    addr = "0.0.0.0:{{.HttpPort}}"
+    writeTimeout = "3s"
+    readTimeout  = "3s"
+
+[etcd]
+    endpoints = [
+        "127.0.0.1:2379"
+    ]
+    dialTimeout = "5s"
+
+[tracing]
+    endpoint =  "127.0.0.1:6831"

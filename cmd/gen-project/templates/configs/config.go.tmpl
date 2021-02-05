@@ -1,0 +1,162 @@
+package configs
+
+
+import (
+	"errors"
+	"flag"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/pescaria/pkg/mconfig"
+	pb "{{.ModPrefix}}{{.Name}}/api"
+
+	"github.com/go-redis/redis/v8"
+	jsoniter "github.com/json-iterator/go"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+	"go.etcd.io/etcd/clientv3"
+)
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+var (
+	host     string
+	weight   int64
+	appEnv   string
+	instance *Config
+)
+
+func init() {
+	addFlag(flag.CommandLine)
+}
+
+func addFlag(fs *flag.FlagSet) {
+	var (
+		defHost, _   = os.Hostname()
+		defWeight, _ = strconv.ParseInt(os.Getenv("MS_WEIGHT"), 10, 32)
+		defAppEnv    = os.Getenv("MS_APP_ENV")
+	)
+	fs.StringVar(&host, "host", defHost, "机器主机名")
+	fs.Int64Var(&weight, "weight", defWeight, "负载均衡权值, 默认读取MS_WEIGHT环境变量, value: 10 etc.")
+	fs.StringVar(&appEnv, "app_env", defAppEnv, "服务运行环境, 默认读取MS_APP_ENV环境变量, value: dev, stage, prod etc.")
+}
+
+// New 提供配置实例
+func New() *Config {
+	return instance
+}
+
+// Config 全局配置
+type Config struct {
+	Env      *Env
+	LogLevel uint32
+	DB       *DBConfig
+	HTTP     *HTTP
+	Grpc     *GRPC
+	Etcd     *clientv3.Config
+	Tracing  *Tracing
+	Redis    *redis.Options
+}
+
+// Env is env config.
+type Env struct {
+	Host   string
+	Weight int64
+	AppEnv string
+}
+
+// DBConfig mysql config.
+type DBConfig struct {
+	DSN          string        // write data source name.
+	PointDSN     string        `toml:"pointDSN"`
+	Active       int           // pool
+	Idle         int           // pool
+	IdleTimeout  time.Duration // connect max life time.
+	QueryTimeout time.Duration // query sql timeout
+	ExecTimeout  time.Duration // execute sql timeout
+	TranTimeout  time.Duration // transaction sql timeout
+	LogMode      bool
+}
+
+// HTTP .
+type HTTP struct {
+	Addr         string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+}
+
+// GRPC .
+type GRPC struct {
+	Addr              string
+	Timeout           time.Duration
+	IdleTimeout       time.Duration
+	MaxLifeTime       time.Duration
+	KeepAliveInterval time.Duration
+	KeepAliveTimeout  time.Duration
+	ForceCloseWait    time.Duration
+}
+
+// Tracing .
+type Tracing struct {
+	Endpoint string
+}
+
+func (c *Config) validate() (err error) {
+	if c.HTTP == nil {
+		err = errors.New("http配置未发现")
+	}
+
+	if c.Etcd == nil {
+		err = errors.New("etcd配置未发现")
+	}
+
+	return
+}
+
+// Init 从文件读取配置
+func Init() (err error) {
+	instance = Default()
+
+	err = mconfig.Init(mconfig.WithAppID(pb.AppID))
+	if err != nil {
+		return
+	}
+
+	if err = loadConfig(mconfig.Viper()); err != nil {
+		return
+	}
+	mconfig.Watch(loadConfig)
+	return
+}
+
+func loadConfig(v *viper.Viper) (err error) {
+	if err = v.Unmarshal(instance); err != nil {
+		return
+	}
+	if err = instance.validate(); err != nil {
+		return
+	}
+	if instance.LogLevel != 0 {
+		log.SetLevel(log.Level(instance.LogLevel))
+	}
+
+	log.Infof("logLevel: %d", instance.LogLevel)
+	return
+}
+
+// Default 默认配置
+func Default() *Config {
+	return &Config{
+		Env: &Env{Host: host, Weight: weight, AppEnv: appEnv},
+		Grpc: &GRPC{
+			Addr:              "0.0.0.0:0",
+			Timeout:           time.Second,
+			IdleTimeout:       time.Second * 60,
+			MaxLifeTime:       time.Hour * 2,
+			ForceCloseWait:    time.Second * 20,
+			KeepAliveInterval: time.Second * 60,
+			KeepAliveTimeout:  time.Second * 20,
+		},
+	}
+}

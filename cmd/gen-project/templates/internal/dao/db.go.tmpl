@@ -1,0 +1,41 @@
+package dao
+
+import (
+	"database/sql"
+
+    "{{.ModPrefix}}{{.Name}}/configs"
+
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
+)
+
+// NewDB .
+func NewDB(c *configs.Config) (db *gorm.DB, cf func(), err error) {
+	var sqlDB *sql.DB
+	db, err = gorm.Open(mysql.Open(c.DB.DSN), &gorm.Config{})
+	if err != nil {
+		return
+	}
+
+	sqlDB, err = db.DB()
+	if err != nil {
+		return
+	}
+
+	if err = sqlDB.Ping(); err != nil {
+		return
+	}
+	sqlDB.SetMaxIdleConns(c.DB.Idle)
+	sqlDB.SetMaxOpenConns(c.DB.Active)
+	sqlDB.SetConnMaxLifetime(c.DB.IdleTimeout)
+
+	cf = func() {
+		d, err := db.DB()
+		if err != nil {
+			return
+		}
+		d.Close()
+	}
+	return
+}
+

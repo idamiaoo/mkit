@@ -1,0 +1,144 @@
+package http
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+
+    "github.com/pescaria/pkg/iputil"
+    pb "{{.ModPrefix}}{{.Name}}/api"
+	"{{.ModPrefix}}{{.Name}}/configs"
+	"{{.ModPrefix}}{{.Name}}/internal/service"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-kratos/kratos/pkg/ecode"
+	jsoniter "github.com/json-iterator/go"
+	log "github.com/sirupsen/logrus"
+)
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+type jsonBody struct {
+	Code       int         `json:"code" form:"code"`
+	Message    string      `json:"message" form:"message"`
+	Detail     string      `json:"detail" form:"detail"`
+	StatusCode int         `json:"status_code" form:"status_code"`
+	Data       interface{} `json:"data,omitempty" form:"data"`
+	Meta       *metaData   `json:"meta" form:"meta"`
+}
+
+type metaData struct {
+	Code      int    `json:"code" form:"code"`
+	Msg       string `json:"msg" form:"msg"`
+	Timestamp int64  `json:"timestamp" form:"timestamp"`
+}
+
+func response(c *gin.Context, data interface{}, err error) {
+	code := http.StatusOK
+	bcode := ecode.Cause(err)
+	if bcode.Code() != 0 {
+		code = http.StatusBadRequest
+	}
+
+	c.Set(contextCodes, bcode.Code())
+
+	if data == nil && code == http.StatusOK {
+		data = make(map[string]interface{})
+	}
+	meta := &metaData{
+		Code:      bcode.Code(),
+		Msg:       bcode.Message(),
+		Timestamp: time.Now().Unix(),
+	}
+
+	if meta.Code != 0 {
+		meta.Code = 1
+	}
+
+	body := &jsonBody{
+		Code:       bcode.Code(),
+		Message:    bcode.Message(),
+		Data:       data,
+		StatusCode: code,
+		Meta:       meta,
+	}
+
+	if bcode.Code() == ecode.ServerErr.Code() {
+		body.Message = err.Error()
+		body.Meta.Msg = err.Error()
+	}
+
+	c.JSON(code, body)
+}
+
+func responseBody(data interface{}, err error) *jsonBody {
+	bcode := ecode.Cause(err)
+	return &jsonBody{
+		Code:    bcode.Code(),
+		Message: bcode.Message(),
+		Data:    data,
+	}
+}
+
+type httpServer struct {
+	c   *configs.Config
+	svc *service.Service
+}
+
+var hs *httpServer
+
+// New new a bm server.
+func New(s *service.Service, c *configs.Config) (server *http.Server, cf func(), err error) {
+	hs := &httpServer{
+		c:   c,
+		svc: s,
+	}
+
+	engine := gin.New()
+
+	hs.initRouter(engine)
+
+	l, err := net.Listen("tcp", c.HTTP.Addr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	server = &http.Server{
+		ReadTimeout:  c.HTTP.ReadTimeout,
+		WriteTimeout: c.HTTP.WriteTimeout,
+		Handler:      engine,
+	}
+	go func() {
+		if err := server.Serve(l); err != nil {
+			if errors.Is(err, http.ErrServerClosed) {
+				return
+			}
+			panic(err)
+		}
+	}()
+	cf = func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		if err := server.Shutdown(ctx); err != nil {
+			log.Errorf("httpSrv.Shutdown error(%v)", err)
+		}
+		cancel()
+	}
+
+	// 获取内网 IP 地址
+    host := iputil.GetLocalIP()
+    port := l.Addr().(*net.TCPAddr).Port
+    if host == "" {
+    	err = fmt.Errorf("获取内网IP失败")
+    	log.WithError(err).Error("http服务初始化失败")
+    	return
+    }
+
+	log.WithFields(log.Fields{
+    	"service":   fmt.Sprintf("%s", pb.AppID),
+    	"listen_at": fmt.Sprintf("%s:%d", host, port),
+    }).Info("开始http服务")
+	return
+}

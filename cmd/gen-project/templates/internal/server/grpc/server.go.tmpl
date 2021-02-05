@@ -1,0 +1,114 @@
+package grpc
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"strconv"
+	"time"
+
+	pb "{{.ModPrefix}}{{.Name}}/api"
+	"{{.ModPrefix}}{{.Name}}/configs"
+	"{{.ModPrefix}}{{.Name}}/internal/service"
+	"github.com/pescaria/pkg/iputil"
+	"github.com/pescaria/pkg/metadata"
+	"github.com/pescaria/pkg/naming"
+	etcdnaming "github.com/pescaria/pkg/naming/etcd"
+
+	grpctracing "github.com/opentracing-contrib/go-grpc"
+	"github.com/opentracing/opentracing-go"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
+)
+
+// New new a grpc server.
+func New(s *service.Service, c *configs.Config) (server *grpc.Server, cf func(), err error) {
+	var (
+		lis        net.Listener
+		localIP    string
+		localPort  int
+		disBuilder *etcdnaming.EtcdBuilder // 服务发现控件
+	)
+
+	keepParam := grpc.KeepaliveParams(keepalive.ServerParameters{
+		MaxConnectionAgeGrace: c.Grpc.ForceCloseWait,
+		MaxConnectionIdle:     c.Grpc.IdleTimeout,
+		Time:                  c.Grpc.KeepAliveInterval,
+		Timeout:               c.Grpc.KeepAliveTimeout,
+		MaxConnectionAge:      c.Grpc.MaxLifeTime,
+	})
+	server = grpc.NewServer(keepParam, grpc.UnaryInterceptor(
+		grpctracing.OpenTracingServerInterceptor(opentracing.GlobalTracer())))
+	pb.Register{{GoName .Name}}Server(server, s)
+
+	lis, err = net.Listen("tcp", c.Grpc.Addr)
+	if err != nil {
+		return
+	}
+	reflection.Register(server)
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	// 生成服务发现控件
+	disBuilder, err = etcdnaming.New(c.Etcd)
+	if err == nil {
+		log.WithError(err).Error("新建服务发现控件失败")
+		return
+	}
+
+	// 获取内网ip地址
+	localIP = iputil.GetLocalIP()
+	localPort = lis.Addr().(*net.TCPAddr).Port
+	advertise := net.JoinHostPort(localIP, strconv.Itoa(localPort))
+
+	// 生成服务发现实例信息
+	ins := naming.Instance{
+		AppID:    pb.AppID,
+		Addrs:    []string{"grpc://" + advertise},
+		Hostname: c.Env.Host,
+		Metadata: map[string]string{metadata.MetaWeight: strconv.Itoa(int(c.Env.Weight))},
+	}
+
+	// 注册服务
+	unregister, err := disBuilder.Register(context.Background(), &ins)
+	if err != nil {
+		log.WithError(err).Error("服务注册失败")
+		return
+	}
+
+	// 回收函数
+	cf = func() {
+		unregister()
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		if err := shutdown(ctx, server); err != nil {
+			log.Errorf("grpc shutdown error(%v)", err)
+		}
+		cancel()
+	}
+
+	log.WithFields(log.Fields{
+		"service":   fmt.Sprintf("%s", pb.AppID),
+		"listen_at": fmt.Sprintf("%s:%d", localIP, localPort),
+	}).Info("grpc服务启动成功")
+	return
+}
+
+func shutdown(ctx context.Context, g *grpc.Server) (err error) {
+	ch := make(chan struct{})
+	go func() {
+		g.GracefulStop()
+		close(ch)
+	}()
+	select {
+	case <-ctx.Done():
+		g.Stop()
+		err = ctx.Err()
+	case <-ch:
+	}
+	return
+}

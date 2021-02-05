@@ -1,0 +1,54 @@
+package main
+
+import (
+	"flag"
+    "fmt"
+    "os"
+    "os/signal"
+    "syscall"
+
+	"github.com/pescaria/pkg/logger"
+    "github.com/pescaria/pkg/tracing/jaeger"
+    "{{.ModPrefix}}{{.Name}}/api"
+    "{{.ModPrefix}}{{.Name}}/configs"
+    "{{.ModPrefix}}{{.Name}}/internal/di"
+
+	"github.com/google/gops/agent"
+	log "github.com/sirupsen/logrus"
+	jaegerconf "github.com/uber/jaeger-client-go/config"
+)
+
+func main() {
+	flag.Parse()
+	logger.Init(logger.WithFields(log.Fields{"sender": api.AppID}))
+
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal(err)
+	}
+	if err := configs.Init(); err != nil {
+		log.Fatal(err)
+	}
+	_, closer := jaeger.NewJaegerTracer(fmt.Sprintf("%s-%s", api.AppID, configs.New().Env.AppEnv), configs.New().Tracing.Endpoint, jaegerconf.Logger(jaeger.StdLogger))
+	defer closer.Close()
+
+	_, closeFunc, err := di.InitApp()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("{{.Name}} start")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+	for {
+		s := <-c
+		log.Infof("get a signal %s", s.String())
+		switch s {
+		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
+			closeFunc()
+			log.Info("{{.Name}} exit")
+			return
+		case syscall.SIGHUP:
+		default:
+			return
+		}
+	}
+}

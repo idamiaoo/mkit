@@ -1,0 +1,90 @@
+package dao
+
+import (
+	"context"
+
+	"{{.ModPrefix}}{{.Name}}/configs"
+
+	"github.com/go-redis/cache/v8"
+	"github.com/go-redis/redis/v8"
+	"github.com/google/wire"
+	jsoniter "github.com/json-iterator/go"
+	"gorm.io/gorm"
+)
+
+var Provider = wire.NewSet(New, NewDB, NewRedis)
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+
+
+type contextKey struct{}
+
+var (
+	contextKeyTransaction = contextKey{}
+)
+
+
+// Dao dao.
+type Dao struct {
+	c     *configs.Config
+	db    *gorm.DB
+	redis *redis.Client
+	cache *cache.Cache
+}
+
+// WithTransaction context 中注入 *gorm.DB 用于绑定事务
+func WithTransaction(ctx context.Context, db *gorm.DB) context.Context {
+	return context.WithValue(ctx, contextKeyTransaction, db)
+}
+
+// New new a dao and return.
+func New(r *redis.Client, db *gorm.DB, c *configs.Config) (d *Dao, cf func(), err error) {
+	return newDao(r, db, c)
+}
+
+func newDao(r *redis.Client, db *gorm.DB, c *configs.Config) (d *Dao, cf func(), err error) {
+	d = &Dao{
+		db:    db,
+		redis: r,
+		cache: cache.New(&cache.Options{
+			Redis:        r,
+			StatsEnabled: true,
+		}),
+		c: c,
+	}
+
+	cf = d.Close
+	return
+}
+
+// Close close the resource.
+func (d *Dao) Close() {
+
+}
+
+// DB 返回 gorm.DB
+func (d *Dao) DB(ctx context.Context) *gorm.DB {
+	if ctx != nil {
+		value := ctx.Value(contextKeyTransaction)
+		if v, ok := value.(*gorm.DB); ok {
+			return v
+		}
+	}
+	return d.db
+}
+
+// Redis 返回 redis.Client
+func (d *Dao) Redis(ctx context.Context) *redis.Client {
+	return d.redis
+}
+
+// Cache 返回 cache 对象
+func (d *Dao) Cache(ctx context.Context) *cache.Cache {
+	return d.cache
+}
+
+// Ping ping the resource.
+func (d *Dao) Ping(ctx context.Context) (err error) {
+	return nil
+}

@@ -1,0 +1,86 @@
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Name}}
+  labels:
+    app: {{.Name}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{.Name}}
+  template:
+    metadata:
+      labels:
+        app: {{.Name}}
+    spec:
+      containers:
+        - name: {{.Name}}
+          imagePullPolicy: IfNotPresent
+          image: registry.cn-zhangjiakou.aliyuncs.com/vdyoo/ms-{{.Name}}:v1.0.0
+          ports: # 应用程序需要暴露的端口
+            - containerPort: {{.GrpcPort}} # grpc 端口
+            - containerPort: {{.HttpPort}} # http 端口
+          livenessProbe: #存活探针,探测容器是否可用
+            tcpSocket:
+              port: {{.HttpPort}}
+            initialDelaySeconds: 300
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe: #就绪探针, 探测成功后, pod 才会被标记为就绪状态
+            tcpSocket:
+              port: {{.HttpPort}}
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env: # 环境变量,从 ConfigMap 读取 acm 配置
+            - name: ACM_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: acm-config
+                  key: acm.namespace
+            - name: ACM_ACCESSKEY
+              valueFrom:
+                configMapKeyRef:
+                  name: acm-config
+                  key: acm.accesskey
+            - name: ACM_SECRETKEY
+              valueFrom:
+                configMapKeyRef:
+                  name: acm-config
+                  key: acm.secretkey
+            - name: ACM_GROUP
+              valueFrom:
+                configMapKeyRef:
+                  name: acm-config
+                  key: acm.group
+            - name: MS_APP_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      imagePullSecrets: # 拉取镜像的用户名和密码
+        - name: docker-registry-aliyun-ecgvd
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Name}}
+  labels:
+    app: {{.Name}}
+spec:
+  ports:
+    - name: grpc
+      port: {{.GrpcPort}}
+      targetPort: {{.GrpcPort}}
+    - name: http
+      port: {{.HttpPort}}
+      targetPort: {{.HttpPort}}
+  selector:
+    app: {{.Name}}

@@ -1,0 +1,22 @@
+package dao
+
+import (
+	"context"
+
+	"{{.ModPrefix}}{{.Name}}/configs"
+
+	"github.com/go-redis/redis/v8"
+)
+
+func NewRedis(c *configs.Config) (r *redis.Client, cf func(), err error) {
+	r = redis.NewClient(c.Redis)
+	cf = func() { r.Close() }
+	return
+}
+
+func (d *Dao) PingRedis(ctx context.Context) (err error) {
+	if err = d.redis.Ping(ctx).Err(); err != nil {
+
+	}
+	return
+}

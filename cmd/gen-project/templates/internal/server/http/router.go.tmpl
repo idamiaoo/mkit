@@ -1,0 +1,24 @@
+package http
+
+import (
+	"net/http"
+
+	"github.com/pescaria/pkg/tracing/jaeger"
+
+	"github.com/gin-gonic/gin"
+)
+
+func (hs *httpServer) initRouter(e *gin.Engine) {
+	e.Use(loggerHandler, gin.Recovery(), jaeger.GinMiddleware())
+
+	{{.Name}} := e.Group("{{.Name}}")
+	{
+		{{.Name}}.GET("/ping", hs.ping)
+	}
+}
+
+func (hs *httpServer) ping(ctx *gin.Context) {
+	if _, err := hs.svc.Ping(ctx, nil); err != nil {
+		ctx.AbortWithStatus(http.StatusServiceUnavailable)
+	}
+}

@@ -1,0 +1,10 @@
+package server
+
+import (
+	"{{.ModPrefix}}{{.Name}}/internal/server/grpc"
+	"{{.ModPrefix}}{{.Name}}/internal/server/http"
+
+	"github.com/google/wire"
+)
+
+var Provider = wire.NewSet(http.New, grpc.New)

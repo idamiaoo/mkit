@@ -1,0 +1,16 @@
+APP_NAME = {{.Name}}
+DOCKER_REGISTRY = registry.cn-zhangjiakou.aliyuncs.com/vdyoo
+IMAGE_TAG=v1.0.0
+IMAGE_NAME= $(DOCKER_REGISTRY)/ms-$(APP_NAME):$(IMAGE_TAG)
+
+default:
+	go build -o ./bin/$(APP_NAME) ./cmd
+
+linux:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/$(APP_NAME) ./cmd
+
+image: linux
+	docker build -t $(IMAGE_NAME) .
+
+registry: image
+	docker push $(IMAGE_NAME)
