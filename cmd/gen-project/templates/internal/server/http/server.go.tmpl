@@ -22,65 +22,36 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type jsonBody struct {
-	Code       int         `json:"code" form:"code"`
-	Message    string      `json:"message" form:"message"`
-	Detail     string      `json:"detail" form:"detail"`
-	StatusCode int         `json:"status_code" form:"status_code"`
-	Data       interface{} `json:"data,omitempty" form:"data"`
-	Meta       *metaData   `json:"meta" form:"meta"`
+	Code    int         `json:"code" form:"code"`
+	Message string      `json:"message" form:"message"`
+	Detail  string      `json:"detail" form:"detail"`
+	Data    interface{} `json:"data,omitempty" form:"data"`
 }
 
-type metaData struct {
-	Code      int    `json:"code" form:"code"`
-	Msg       string `json:"msg" form:"msg"`
-	Timestamp int64  `json:"timestamp" form:"timestamp"`
+func (j *jsonBody) String() string {
+	v, _ := json.MarshalToString(j)
+	return v
 }
 
 func response(c *gin.Context, data interface{}, err error) {
 	code := http.StatusOK
-	bcode := ecode.Cause(err)
-	if bcode.Code() != 0 {
-		code = http.StatusBadRequest
-	}
+	bCode := ecode.Cause(err)
 
-	c.Set(contextCodes, bcode.Code())
-
-	if data == nil && code == http.StatusOK {
+	if data == nil {
 		data = make(map[string]interface{})
-	}
-	meta := &metaData{
-		Code:      bcode.Code(),
-		Msg:       bcode.Message(),
-		Timestamp: time.Now().Unix(),
-	}
-
-	if meta.Code != 0 {
-		meta.Code = 1
 	}
 
 	body := &jsonBody{
-		Code:       bcode.Code(),
-		Message:    bcode.Message(),
-		Data:       data,
-		StatusCode: code,
-		Meta:       meta,
-	}
-
-	if bcode.Code() == ecode.ServerErr.Code() {
-		body.Message = err.Error()
-		body.Meta.Msg = err.Error()
-	}
-
-	c.JSON(code, body)
-}
-
-func responseBody(data interface{}, err error) *jsonBody {
-	bcode := ecode.Cause(err)
-	return &jsonBody{
-		Code:    bcode.Code(),
-		Message: bcode.Message(),
+		Code:    bCode.Code(),
+		Message: bCode.Message(),
 		Data:    data,
 	}
+
+	if bCode.Code() == ecode.ServerErr.Code() {
+		body.Message = err.Error()
+	}
+	c.Set(responseBodyKey, body.String())
+	c.JSON(code, body)
 }
 
 type httpServer struct {
@@ -139,6 +110,6 @@ func New(s *service.Service, c *configs.Config) (server *http.Server, cf func(),
 	log.WithFields(log.Fields{
     	"service":   fmt.Sprintf("%s", pb.AppID),
     	"listen_at": fmt.Sprintf("%s:%d", host, port),
-    }).Info("开始http服务")
+    }).Info("http服务启动成功")
 	return
 }

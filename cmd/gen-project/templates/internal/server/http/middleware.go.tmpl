@@ -1,41 +1,43 @@
 package http
 
 import (
-	"os"
+	"bytes"
+	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
-	contextCodes = "context:codes"
+	responseBodyKey = "response_body"
 )
-
-var ginLog *logrus.Logger
-
-func init() {
-	ginLog = logrus.New()
-	ginLog.SetOutput(os.Stdout)
-}
 
 func loggerHandler(c *gin.Context) {
 	// Start timer
 	start := time.Now()
-	path := c.Request.URL.Path
-	raw := c.Request.URL.RawQuery
-	method := c.Request.Method
+
+	body, _ := ioutil.ReadAll(c.Request.Body)
+	_ = c.Request.Body.Close()
+	log.WithFields(log.Fields{
+		"request_id": c.Writer.Header().Get("X-Request-ID"),
+		"method":     c.Request.Method,
+		"path":       c.Request.URL.Path,
+		"query":      c.Request.URL.RawQuery,
+		"client_ip":  c.ClientIP(),
+		"body":       string(body),
+	}).Info("http request")
+	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+
 	// Process request
 	c.Next()
-
 	// Stop timer
 	end := time.Now()
-	latency := end.Sub(start)
-	statusCode := c.Writer.Status()
-	ecode := c.GetInt(contextCodes)
-	clientIP := c.ClientIP()
-	if raw != "" {
-		path = path + "?" + raw
-	}
-	ginLog.Infof("method:%s | path:%s | code:%d | ip:%s | time:%v | ecode:%d", method, path, statusCode, clientIP, latency/time.Millisecond, ecode)
+	log.WithFields(log.Fields{
+		"request_id":  c.Writer.Header().Get("X-Request-ID"),
+		"status_code": c.Writer.Status(),
+		"body":        c.GetString(responseBodyKey),
+		"cost_time":   fmt.Sprintf("%v", end.Sub(start)),
+	}).Info("http response")
 }

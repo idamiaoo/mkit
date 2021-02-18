@@ -18,9 +18,10 @@ import (
 	jaegerconf "github.com/uber/jaeger-client-go/config"
 )
 
+//go:generate go get -u github.com/pescaria/pkg
 func main() {
 	flag.Parse()
-	logger.Init(logger.WithFields(log.Fields{"sender": api.AppID}))
+	logger.Init(logger.WithHooks(logger.NewSenderHook(api.AppID)))
 
 	if err := agent.Listen(agent.Options{}); err != nil {
 		log.Fatal(err)
