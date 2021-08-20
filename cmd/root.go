@@ -19,7 +19,8 @@ import (
 	"fmt"
 	"os"
 
-	genproject "github.com/pescaria/mkit/cmd/gen-project"
+	"mkit/cmd/new"
+	"mkit/cmd/ucloud"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
@@ -31,8 +32,8 @@ var cfgFile string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:     "mkit",
-	Short:   "魔法校命令行工具",
-	Long:    `魔法校命令行工具, 包行项目初始化等功能`,
+	Short:   "carl 的工具",
+	Long:    `carl 的各种高小工具`,
 	Example: `mkit init project`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
@@ -60,7 +61,8 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.AddCommand(genproject.Command())
+	rootCmd.AddCommand(new.Command())
+	rootCmd.AddCommand(ucloud.GetGenerateCmd())
 }
 
 // initConfig reads in config file and ENV variables if set.

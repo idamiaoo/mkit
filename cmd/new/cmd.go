@@ -1,4 +1,4 @@
-package genproject
+package new
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ var (
 	directory = "."
 
 	initCmd = &cobra.Command{
-		Use:   "init 项目名称",
+		Use:   "new 项目名称",
 		Short: "初始化一个 golang 项目",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) < 1 || strings.HasPrefix(args[0], "-") {

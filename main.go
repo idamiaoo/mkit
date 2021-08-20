@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/pescaria/mkit/cmd"
+import "mkit/cmd"
 
 func main() {
 	cmd.Execute()

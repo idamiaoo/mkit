@@ -1,4 +1,4 @@
-package genproject
+package new
 
 import (
 	"bytes"
@@ -50,6 +50,10 @@ func (p *project) create() (err error) {
 		}
 	}
 
+	if err = p.modDownload(); err != nil {
+		return
+	}
+
 	if err = p.generate("./..."); err != nil {
 		return
 	}
@@ -61,6 +65,14 @@ func (p *project) create() (err error) {
 
 func (p *project) generate(path string) error {
 	cmd := exec.Command("go", "generate", "-x", path)
+	cmd.Dir = p.AbsolutePath
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (p *project) modDownload() error {
+	cmd := exec.Command("go", "mod", "download")
 	cmd.Dir = p.AbsolutePath
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
